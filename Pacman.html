@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pacman Játék</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      background: #111827;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    h1 {
+      color: #facc15;
+      font-size: 2.5rem;
+    }
+
+    .hud {
+      display: flex;
+      gap: 24px;
+      font-size: 1.2rem;
+    }
+
+    #game {
+      display: grid;
+      grid-template-columns: repeat(20, 28px);
+      grid-template-rows: repeat(20, 28px);
+      gap: 2px;
+      background: #1f2937;
+      padding: 8px;
+      border: 4px solid #3b82f6;
+      border-radius: 16px;
+      box-shadow: 0 0 30px rgba(59,130,246,0.4);
+    }
+
+    .cell {
+      width: 28px;
+      height: 28px;
+      background: #0f172a;
+      position: relative;
+    }
+
+    .wall {
+      background: #2563eb;
+      border-radius: 6px;
+    }
+
+    .dot::after {
+      content: "";
+      width: 6px;
+      height: 6px;
+      background: #fde68a;
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .pacman {
+      background: #facc15;
+      border-radius: 50%;
+    }
+
+    .ghost {
+      border-radius: 50% 50% 8px 8px;
+    }
+
+    .ghost.red { background: #ef4444; }
+    .ghost.pink { background: #ec4899; }
+    .ghost.cyan { background: #22d3ee; }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      gap: 16px;
+      color: white;
+      font-size: 2rem;
+      z-index: 10;
+    }
+
+    button {
+      padding: 12px 20px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 10px;
+      background: #facc15;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #fde047;
+    }
+  </style>
+</head>
+<body>
+  <h1>Pacman</h1>
+
+  <div class="hud">
+    <div>Pont: <span id="score">0</span></div>
+    <div>Maradék pontok: <span id="dots">0</span></div>
+  </div>
+
+  <div id="game"></div>
+
+  <div class="overlay" id="overlay" style="display:none;">
+    <div id="message"></div>
+    <button onclick="restartGame()">Új játék</button>
+  </div>
+
+  <script>
+    const layout = [
+      "####################",
+      "#........##........#",
+      "#.####.#.##.#.####.#",
+      "#..................#",
+      "#.####.######.####.#",
+      "#..................#",
+      "#.####.#.##.#.####.#",
+      "#......#....#......#",
+      "######.##..##.######",
+      "#..................#",
+      "#.####.######.####.#",
+      "#..................#",
+      "#.####.#.##.#.####.#",
+      "#......#....#......#",
+      "######.##..##.######",
+      "#..................#",
+      "#.####.######.####.#",
+      "#........##........#",
+      "#..................#",
+      "####################"
+    ];
+
+    const game = document.getElementById('game');
+    const scoreEl = document.getElementById('score');
+    const dotsEl = document.getElementById('dots');
+    const overlay = document.getElementById('overlay');
+    const message = document.getElementById('message');
+
+    let pacman = { x: 1, y: 1 };
+    let ghosts = [
+      { x: 18, y: 1, class: 'red' },
+      { x: 18, y: 18, class: 'pink' },
+      { x: 1, y: 18, class: 'cyan' }
+    ];
+
+    let score = 0;
+    let dots = 0;
+    let board = [];
+    let gameOver = false;
+
+    function initBoard() {
+      game.innerHTML = '';
+      board = [];
+      dots = 0;
+
+      layout.forEach((row, y) => {
+        row.split('').forEach((cell, x) => {
+          const div = document.createElement('div');
+          div.classList.add('cell');
+
+          if (cell === '#') {
+            div.classList.add('wall');
+            board.push('wall');
+          } else {
+            div.classList.add('dot');
+            board.push('dot');
+            dots++;
+          }
+
+          game.appendChild(div);
+        });
+      });
+
+      updateHUD();
+      drawCharacters();
+    }
+
+    function drawCharacters() {
+      document.querySelectorAll('.pacman, .ghost').forEach(el => {
+        el.classList.remove('pacman', 'ghost', 'red', 'pink', 'cyan');
+      });
+
+      const pacmanIndex = pacman.y * 20 + pacman.x;
+      game.children[pacmanIndex].classList.add('pacman');
+
+      ghosts.forEach(g => {
+        const idx = g.y * 20 + g.x;
+        game.children[idx].classList.add('ghost', g.class);
+      });
+    }
+
+    function movePacman(dx, dy) {
+      if (gameOver) return;
+
+      const nx = pacman.x + dx;
+      const ny = pacman.y + dy;
+
+      if (layout[ny][nx] === '#') return;
+
+      pacman.x = nx;
+      pacman.y = ny;
+
+      const idx = ny * 20 + nx;
+      if (game.children[idx].classList.contains('dot')) {
+        game.children[idx].classList.remove('dot');
+        score += 10;
+        dots--;
+      }
+
+      moveGhosts();
+      checkCollision();
+      drawCharacters();
+      updateHUD();
+
+      if (dots === 0) {
+        endGame('Nyertél!');
+      }
+    }
+
+    function moveGhosts() {
+      ghosts.forEach(g => {
+        const directions = [
+          { dx: 1, dy: 0 },
+          { dx: -1, dy: 0 },
+          { dx: 0, dy: 1 },
+          { dx: 0, dy: -1 }
+        ];
+
+        const validMoves = directions.filter(d => {
+          const nx = g.x + d.dx;
+          const ny = g.y + d.dy;
+          return layout[ny] && layout[ny][nx] !== '#';
+        });
+
+        const move = validMoves[Math.floor(Math.random() * validMoves.length)];
+        g.x += move.dx;
+        g.y += move.dy;
+      });
+    }
+
+    function checkCollision() {
+      ghosts.forEach(g => {
+        if (g.x === pacman.x && g.y === pacman.y) {
+          endGame('Vesztettél!');
+        }
+      });
+    }
+
+    function endGame(text) {
+      gameOver = true;
+      message.textContent = text;
+      overlay.style.display = 'flex';
+    }
+
+    function updateHUD() {
+      scoreEl.textContent = score;
+      dotsEl.textContent = dots;
+    }
+
+    function restartGame() {
+      pacman = { x: 1, y: 1 };
+      ghosts = [
+        { x: 18, y: 1, class: 'red' },
+        { x: 18, y: 18, class: 'pink' },
+        { x: 1, y: 18, class: 'cyan' }
+      ];
+      score = 0;
+      gameOver = false;
+      overlay.style.display = 'none';
+      initBoard();
+    }
+
+    document.addEventListener('keydown', e => {
+      switch (e.key) {
+        case 'ArrowUp': movePacman(0, -1); break;
+        case 'ArrowDown': movePacman(0, 1); break;
+        case 'ArrowLeft': movePacman(-1, 0); break;
+        case 'ArrowRight': movePacman(1, 0); break;
+      }
+    });
+
+    initBoard();
+  </script>
+</body>
+</html>
